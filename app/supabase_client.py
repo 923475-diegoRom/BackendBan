@@ -12,23 +12,20 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 def create_user(name: str, initial_balance: int = 1_000_000):
     """Insert a new user into the `users` table and return the record.
-    Assumes a table with columns: id (uuid default uuid_generate_v4()), name, balance, created_at.
     """
     data = {
         "name": name,
         "balance": initial_balance,
     }
     result = supabase.table("users").insert(data).execute()
-    if result.error:
-        raise Exception(f"Supabase error creating user: {result.error.message}")
+    if not result.data:
+        raise Exception("Supabase error creating user: no data returned")
     return result.data[0]
 
 def create_card(user_id: str, provider: str = "Banorte", card_number: str | None = None, expiry: str | None = None):
     """Create a Banorte card for the given user.
-    `card_number` and `expiry` can be generated if not provided.
     """
     if not card_number:
-        # Simple placeholder card number based on user_id and random uuid segment
         card_number = f"{user_id[:4].upper()}{int(uuid.uuid4().int >> 96):010d}"
     if not expiry:
         expiry = "2029-12-31"
@@ -39,8 +36,8 @@ def create_card(user_id: str, provider: str = "Banorte", card_number: str | None
         "expiry": expiry,
     }
     result = supabase.table("cards").insert(data).execute()
-    if result.error:
-        raise Exception(f"Supabase error creating card: {result.error.message}")
+    if not result.data:
+        raise Exception("Supabase error creating card: no data returned")
     return result.data[0]
 
 def create_contact(user_id: str, name: str, phone: str):
@@ -52,6 +49,6 @@ def create_contact(user_id: str, name: str, phone: str):
         "phone": phone,
     }
     result = supabase.table("contacts").insert(data).execute()
-    if result.error:
-        raise Exception(f"Supabase error creating contact: {result.error.message}")
+    if not result.data:
+        raise Exception("Supabase error creating contact: no data returned")
     return result.data[0]
