@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langgraph.prebuilt import create_react_agent
 from app.core import get_llm
 from app.rag import seed_sample_data, ingest_pdf
 from app.database import init_db, save_audit_log
@@ -78,14 +78,7 @@ El cliente actual logueado es C-TEST (Usuario Test). Si necesitas saber algo de 
 Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin dudar usando las herramientas.
 """
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt_text),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
-    
-    agent = create_tool_calling_agent(llm, get_agent_tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=get_agent_tools, verbose=True)
+    agent_executor = create_react_agent(llm, tools=get_agent_tools, state_modifier=system_prompt_text)
     
     start_time = time.time()
     
@@ -96,7 +89,7 @@ Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin
         full_response = ""
         
         try:
-            async for event in agent_executor.astream_events({"input": request.message}, version="v2"):
+            async for event in agent_executor.astream_events({"messages": [("user", request.message)]}, version="v2"):
                 if event["event"] == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content:
