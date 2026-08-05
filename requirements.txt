@@ -1,6 +1,9 @@
 fastapi
 uvicorn
 langchain-groq
+fastapi
+uvicorn
+langchain-groq
 langchain-huggingface
 qdrant-client
 python-dotenv
@@ -8,9 +11,10 @@ pydantic
 prometheus-client
 sentence-transformers
 python-multipart
+faker
 pypdf
 langchain-text-splitters
 groq
-sqlitecloud
+supabase-py
 langchain
 langgraph
