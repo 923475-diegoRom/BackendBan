@@ -9,7 +9,7 @@ load_dotenv()
 # Model Context Protocol / LLM:llama-3.3-70b-versatile  9B vía Groq
 def get_llm():
     return ChatGroq(
-        model_name="llama-3.1-8b-instant",
+        model_name="qwen/qwen3.6-27b",
         groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.2,
         streaming=True
@@ -21,7 +21,7 @@ def get_fallback_llm():
     Used when the primary model hits rate limits or other errors.
     """
     return ChatGroq(
-        model_name="qwen/qwen3.6-27b",
+        model_name="llama-3.1-8b-instant",
         groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.2,
         streaming=True
