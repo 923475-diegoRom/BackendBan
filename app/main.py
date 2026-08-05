@@ -78,7 +78,7 @@ El cliente actual logueado es C-TEST (Usuario Test). Si necesitas saber algo de 
 Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin dudar usando las herramientas.
 """
     
-    agent_executor = create_react_agent(llm, tools=get_agent_tools, state_modifier=system_prompt_text)
+    agent_executor = create_react_agent(llm, tools=get_agent_tools)
     
     start_time = time.time()
     
@@ -89,7 +89,9 @@ Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin
         full_response = ""
         
         try:
-            async for event in agent_executor.astream_events({"messages": [("user", request.message)]}, version="v2"):
+            async for event in agent_executor.astream_events({
+                "messages": [("system", system_prompt_text), ("user", request.message)]
+            }, version="v2"):
                 if event["event"] == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content:
