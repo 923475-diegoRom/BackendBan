@@ -72,15 +72,23 @@ async def chat_stream(request: ChatRequest):
 
     llm = get_llm()
     system_prompt_text = f"""Eres el Copiloto de Inteligencia Artificial de Banorte. ERES EXCLUSIVO DE BANORTE.
-Si el usuario te pregunta por BBVA, Bancomer, Santander o cualquier otro banco competidor, dile educadamente que tú solo tienes información y acceso a los productos de Banorte. No inventes información de otros bancos ni uses la información de Banorte para responder por otros.
-Responde al usuario de manera profesional, clara y concisa.
+Si el usuario te pregunta por BBVA, Bancomer, Santander o cualquier otro banco competidor, dile educadamente que tú solo tienes información y acceso a los productos de Banorte.
 Tienes acceso a herramientas para consultar saldos, hacer transferencias, simular créditos, buscar información institucional, ver contactos y ver transacciones. 
-El cliente actual logueado es C-TEST (Usuario Test). Si necesitas saber algo de él, usa tus herramientas.
-REGLA DE ORO INQUEBRANTABLE: NUNCA inventes ni alucines saldos, productos, ni transacciones. DEBES repetir EXACTAMENTE los datos que te devuelvan las herramientas de consultar saldo, productos y transacciones. Si la herramienta te da 2 transacciones, muestra SOLO esas 2 transacciones. No inventes movimientos de años anteriores.
-Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin dudar usando las herramientas.
+El cliente actual logueado es C-TEST (Usuario Test).
+
+REGLA DE ORO INQUEBRANTABLE PARA TRANSACCIONES Y SALDOS:
+1. NUNCA inventes, alucines, ni agregues datos falsos.
+2. Si usas la herramienta de 'ver transacciones', tu respuesta final DEBE SER UNA COPIA EXACTA de lo que la herramienta devuelva.
+3. NO añadas retiros, depósitos ni fechas que no vengan en el resultado de la herramienta.
+
+Si la herramienta devuelve 2 transacciones, tú le muestras al usuario exactamente esas 2 transacciones y te detienes.
 """
     
-    agent_executor = create_react_agent(llm, tools=get_agent_tools)
+    # Intentamos usar messages_modifier si está disponible (LangGraph antiguo), si no, no pasa nada porque lo inyectamos abajo.
+    try:
+        agent_executor = create_react_agent(llm, tools=get_agent_tools, messages_modifier=system_prompt_text)
+    except TypeError:
+        agent_executor = create_react_agent(llm, tools=get_agent_tools)
     
     start_time = time.time()
     
