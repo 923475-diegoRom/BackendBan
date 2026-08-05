@@ -123,8 +123,12 @@ Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin
                             # Try to extract the sources if we returned JSON
                             parsed = json.loads(tool_output)
                             sources = parsed.get("fuentes_usadas", [])
+                            info_text = parsed.get("info", "")
                             if sources:
-                                yield f"data: {json.dumps({'type': 'sources', 'content': sources})}\n\n"
+                                # Enviar el formato exacto que el Frontend (App.jsx) puede aprovechar
+                                # Incluimos los "pedazos de info" en pageContent
+                                formatted_sources = [{"metadata": {"source": src}, "pageContent": info_text} for src in sources]
+                                yield f"data: {json.dumps({'type': 'sources', 'content': formatted_sources})}\n\n"
                         except Exception:
                             pass
                             
