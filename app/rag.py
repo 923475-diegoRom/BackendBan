@@ -43,11 +43,11 @@ def search_context(query: str, limit: int = 2):
     embeddings = get_embeddings()
     query_vector = embeddings.embed_query(query)
     
-    results = client.search(
+    results = client.query_points(
         collection_name=COLLECTION_NAME,
-        query_vector=query_vector,
+        query=query_vector,
         limit=limit
-    )
+    ).points
     
     contexts = []
     sources = []
