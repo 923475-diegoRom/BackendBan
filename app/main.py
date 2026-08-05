@@ -1,3 +1,14 @@
+"""
+BackendBan – FastAPI entry point
+
+Este módulo define la aplicación FastAPI, configura CORS, registra los eventos de inicio y expone los endpoints principales:
+- `/api/v1/chat/stream`   → streaming de respuesta del LLM con RAG.
+- `/api/v1/audio/transcribe` → transcribe audio usando Whisper de Groq.
+- `/api/v1/documents/upload` → ingestión de PDFs en Qdrant.
+- `/metrics` y `/api/v1/status` → métricas y salud de la API.
+
+Cada endpoint está instrumentado con métricas Prometheus y logging estructurado para observabilidad.
+"""
 import time
 import json
 import uuid
