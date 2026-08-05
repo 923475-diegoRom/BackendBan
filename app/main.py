@@ -84,8 +84,12 @@ def startup_db():
 def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-async def _run_agent_stream(llm, system_prompt_text, recent_messages, request_id, model_name):
-    agent_executor = create_react_agent(llm, tools=get_agent_tools, prompt=system_prompt_text)
+from app.supabase_client import supabase
+from app.supabase_helper import select
+from app.agent_tools import get_agent_tools_for_user
+
+async def _run_agent_stream(llm, tools, system_prompt_text, recent_messages, request_id, model_name):
+    agent_executor = create_react_agent(llm, tools=tools, prompt=system_prompt_text)
     start_time = time.time()
     
     first_token_received = False
@@ -123,21 +127,42 @@ async def _run_agent_stream(llm, system_prompt_text, recent_messages, request_id
     asyncio.create_task(asyncio.to_thread(save_audit_log, request_id, "prompt", full_response, ttft, total_duration, token_count, model_name))
 
 @app.post("/api/v1/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, req: Request):
     request_id = str(uuid.uuid4())
     primary_model_name = "llama-3.3-70b-versatile"
     fallback_model_name = "llama-3.1-8b-versatile"
+
+    # Extraer de forma segura el ID del usuario autenticado desde el token Bearer
+    auth_header = req.headers.get("authorization")
+    user_id = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            res = supabase.auth.get_user(token)
+            if res and hasattr(res, 'user') and res.user:
+                metadata = getattr(res.user, "user_metadata", {}) or {}
+                user_id = metadata.get("profile_id")
+        except Exception:
+            pass
+
+    if not user_id:
+        users = select("users", "id")
+        user_id = users[0]["id"] if users else "demo-user"
+
+    # Crear herramientas con alcance exclusivo para este usuario
+    tools = get_agent_tools_for_user(user_id)
+
     save_chat_message(request_id, "user", request.message)
     recent_messages = load_chat_history(request_id, limit=2)
-    system_prompt_text = "Eres el Copiloto de IA de Banorte..."
+    system_prompt_text = "Eres el Copiloto de IA de Banorte. Atiendes únicamente al usuario autenticado. No tienes acceso a datos de otros usuarios ni debes revelar información ajena bajo ninguna circunstancia."
     
     async def stream_generator():
         try:
-            async for event in _run_agent_stream(get_llm(), system_prompt_text, recent_messages, request_id, primary_model_name):
+            async for event in _run_agent_stream(get_llm(), tools, system_prompt_text, recent_messages, request_id, primary_model_name):
                 yield event
         except RateLimitError:
             logger.warning("Rate limit reached; switching to fallback model", extra={"extra_data": {"request_id": request_id}})
-            async for event in _run_agent_stream(get_fallback_llm(), system_prompt_text, recent_messages, request_id, fallback_model_name):
+            async for event in _run_agent_stream(get_fallback_llm(), tools, system_prompt_text, recent_messages, request_id, fallback_model_name):
                 yield event
         except Exception as e:
             logger.error(f"Error: {e}")

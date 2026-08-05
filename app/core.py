@@ -21,7 +21,7 @@ def get_fallback_llm():
     Used when the primary model hits rate limits or other errors.
     """
     return ChatGroq(
-        model_name="llama-3.1-8b-versatile",
+        model_name="llama-3.1-8b-instant",
         groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.2,
         streaming=True

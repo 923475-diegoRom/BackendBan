@@ -13,24 +13,19 @@ def init_core_db():
     pass
 
 def consultar_saldo(cliente_id: str) -> str:
-    # 1. Consultar usuario principal en tabla users
+    # Consulta estricta del usuario autenticado
     users = select("users", "name, balance", id=cliente_id)
     if not users:
-        users = select("users", "name, balance")
-    resultado = ""
-    if users:
-        u = users[0]
-        resultado += f"Saldo principal de {u.get('name', 'tu cuenta')}: ${u.get('balance', 0):,.2f} MXN\n"
+        return "No se encontró información de saldo asociada a tu usuario."
+    u = users[0]
+    resultado = f"Saldo disponible de tu cuenta ({u.get('name', 'Usuario')}): ${u.get('balance', 0):,.2f} MXN\n"
     
-    # 2. Consultar cuentas adicionales si existen
-    cuentas = select("cuentas", "cuenta_id, tipo, saldo")
+    cuentas = select("cuentas", "cuenta_id, tipo, saldo", cliente_id=cliente_id)
     if cuentas:
         resultado += "Cuentas adicionales:\n"
         for cta in cuentas:
             resultado += f"- Cuenta {cta['tipo']} ({cta['cuenta_id']}): ${cta['saldo']:,.2f} MXN\n"
             
-    if not resultado:
-        return "Saldo actual en tu cuenta Banorte: $1,000,000.00 MXN"
     return resultado
 
 def consultar_productos(cliente_id: str) -> str:
@@ -43,12 +38,10 @@ def consultar_productos(cliente_id: str) -> str:
     return resultado
 
 def consultar_contactos(cliente_id: str) -> str:
-    # La tabla en Supabase se llama 'contacts'
+    # Consulta estricta de contactos del usuario autenticado
     rows = select("contacts", "*", user_id=cliente_id)
     if not rows:
         rows = select("contacts", "*", cliente_id=cliente_id)
-    if not rows:
-        rows = select("contacts", "*")
     if not rows:
         return "No tienes contactos guardados."
     resultado = "Tus contactos frecuentes:\n"
