@@ -87,7 +87,7 @@ async def chat_stream(request: ChatRequest):
         try:
             # Enviar las fuentes primero si existen
             if sources:
-                yield f"data: {json.dumps({'type': 'sources', 'content': sources})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'sources', 'content': sources})}\n\n"
             
             async for chunk in llm.astream(system_prompt):
                 if chunk.content:
@@ -103,7 +103,7 @@ async def chat_stream(request: ChatRequest):
                     
                     token_count += 1
                     data = json.dumps({"type": "token", "content": chunk.content})
-                    yield f"data: {data}\\n\\n"
+                    yield f"data: {data}\n\n"
                     await asyncio.sleep(0.01)
 
             # Cálculo de la latencia total y registros de cierre
