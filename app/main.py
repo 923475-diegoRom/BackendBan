@@ -85,7 +85,7 @@ def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 async def _run_agent_stream(llm, system_prompt_text, recent_messages, request_id, model_name):
-    agent_executor = create_react_agent(llm, tools=get_agent_tools, messages_modifier=system_prompt_text)
+    agent_executor = create_react_agent(llm, tools=get_agent_tools, prompt=system_prompt_text)
     start_time = time.time()
     
     first_token_received = False
