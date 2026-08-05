@@ -2,6 +2,8 @@ import time
 import json
 import uuid
 import asyncio
+import os
+from groq import Groq
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -181,4 +183,27 @@ async def upload_document(file: UploadFile = File(...)):
         }
     except Exception as e:
         logger.error(f"Error procesando PDF: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/v1/audio/transcribe")
+async def transcribe_audio(audio: UploadFile = File(...)):
+    try:
+        # Inicializar cliente de Groq
+        groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        
+        # Leer archivo a memoria
+        file_content = await audio.read()
+        
+        # Llamar a Whisper API vía Groq
+        transcription = groq_client.audio.transcriptions.create(
+            file=(audio.filename, file_content),
+            model="whisper-large-v3",
+            response_format="json",
+            language="es"
+        )
+        
+        return {"status": "success", "text": transcription.text}
+        
+    except Exception as e:
+        logger.error(f"Error en transcripción de audio: {str(e)}")
         return {"status": "error", "message": str(e)}

@@ -10,3 +10,4 @@ sentence-transformers
 python-multipart
 pypdf
 langchain-text-splitters
+groq
