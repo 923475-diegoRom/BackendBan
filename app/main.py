@@ -25,7 +25,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import create_react_agent
 from app.core import get_llm
 from app.rag import seed_sample_data, ingest_pdf
-from app.database import init_db, save_audit_log, init_chat_history, save_chat_message, load_chat_history
+from app.supabase_audit import init_db, save_audit_log, init_chat_history, save_chat_message, load_chat_history
 from app.core import get_fallback_llm
 from app.auth import router as auth_router
 from groq import RateLimitError
@@ -131,7 +131,7 @@ async def _run_agent_stream(llm, tools, system_prompt_text, user_message, reques
     yield f"data: {json.dumps({'type': 'metrics', 'content': metrics_data})}\n\n"
     
     asyncio.create_task(asyncio.to_thread(save_chat_message, request_id, "assistant", full_response))
-    asyncio.create_task(asyncio.to_thread(save_audit_log, request_id, "prompt", full_response, ttft, total_duration, token_count, model_name))
+    asyncio.create_task(asyncio.to_thread(save_audit_log, request_id, user_message, full_response, ttft, total_duration, token_count, model_name))
 
 @app.post("/api/v1/chat/stream")
 async def chat_stream(request: ChatRequest, req: Request):
