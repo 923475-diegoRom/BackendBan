@@ -10,10 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import create_tool_calling_agent, AgentExecutor
 from app.core import get_llm
-from app.rag import search_context, seed_sample_data, ingest_pdf
+from app.rag import seed_sample_data, ingest_pdf
 from app.database import init_db, save_audit_log
-from app.tools import simular_credito
+from app.core_banking import init_core_db
+from app.agent_tools import get_agent_tools
 from app.logger import get_logger
 from app.metrics import LLM_REQUEST_COUNTER, LLM_LATENCY_HISTOGRAM, LLM_TTFT_HISTOGRAM
 
@@ -49,6 +52,8 @@ def startup_db():
     seed_sample_data()
     # Inicializa BD de logs
     init_db()
+    # Inicializa BD de core bancario
+    init_core_db()
 
 # Endpoint para recolección de métricas por Prometheus/Datadog/Azure Monitor
 @app.get("/metrics")
@@ -66,21 +71,21 @@ async def chat_stream(request: ChatRequest):
     )
 
     llm = get_llm()
-    sources = []
-    context = ""
+    system_prompt_text = f"""Eres el Copiloto de Inteligencia Artificial de Banorte.
+Responde al usuario de manera profesional, clara y concisa.
+Tienes acceso a herramientas para consultar saldos, hacer transferencias, simular créditos, buscar información institucional, ver contactos y ver transacciones. 
+El cliente actual logueado es C-TEST (Usuario Test). Si necesitas saber algo de él, usa tus herramientas.
+Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin dudar usando las herramientas.
+"""
     
-    if request.use_rag:
-        context, sources = search_context(request.message)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt_text),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
     
-    system_prompt = f"""
-    Eres el Copiloto de Inteligencia Artificial de Banorte.
-    Responde al usuario de manera profesional, clara y concisa.
-    
-    Contexto de apoyo disponible:
-    {context}
-    
-    Pregunta del usuario: {request.message}
-    """
+    agent = create_tool_calling_agent(llm, get_agent_tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=get_agent_tools, verbose=True)
     
     start_time = time.time()
     
@@ -91,27 +96,32 @@ async def chat_stream(request: ChatRequest):
         full_response = ""
         
         try:
-            # Enviar las fuentes primero si existen
-            if sources:
-                yield f"data: {json.dumps({'type': 'sources', 'content': sources})}\n\n"
-            
-            async for chunk in llm.astream(system_prompt):
-                if chunk.content:
-                    full_response += chunk.content
-                    # Medir Time To First Token (TTFT) en la primera emisión de token
-                    if not first_token_received:
-                        ttft = time.time() - start_time
-                        first_token_received = True
-                        LLM_TTFT_HISTOGRAM.labels(model=model_name).observe(ttft)
-                        logger.info(
-                            "Primer token emitido", 
-                            extra={"extra_data": {"request_id": request_id, "ttft_seconds": round(ttft, 4)}}
-                        )
-                    
-                    token_count += 1
-                    data = json.dumps({"type": "token", "content": chunk.content})
-                    yield f"data: {data}\n\n"
-                    await asyncio.sleep(0.01)
+            async for event in agent_executor.astream_events({"input": request.message}, version="v2"):
+                if event["event"] == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content:
+                        full_response += chunk.content
+                        if not first_token_received:
+                            ttft = time.time() - start_time
+                            first_token_received = True
+                            LLM_TTFT_HISTOGRAM.labels(model=model_name).observe(ttft)
+                            logger.info(
+                                "Primer token emitido", 
+                                extra={"extra_data": {"request_id": request_id, "ttft_seconds": round(ttft, 4)}}
+                            )
+                        
+                        token_count += 1
+                        data = json.dumps({"type": "token", "content": chunk.content})
+                        yield f"data: {data}\n\n"
+                        await asyncio.sleep(0.01)
+                elif event["event"] == "on_tool_start":
+                    tool_name = event["name"]
+                    tool_input = event["data"].get("input", {})
+                    yield f"data: {json.dumps({'type': 'tool_start', 'name': tool_name, 'input': tool_input})}\n\n"
+                elif event["event"] == "on_tool_end":
+                    tool_name = event["name"]
+                    tool_output = event["data"].get("output", "")
+                    yield f"data: {json.dumps({'type': 'tool_end', 'name': tool_name, 'output': str(tool_output)})}\n\n"
 
             # Cálculo de la latencia total y registros de cierre
             total_duration = time.time() - start_time
