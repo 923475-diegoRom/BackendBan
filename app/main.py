@@ -153,8 +153,13 @@ async def chat_stream(request: ChatRequest, req: Request):
     tools = get_agent_tools_for_user(user_id)
 
     save_chat_message(request_id, "user", request.message)
-    recent_messages = load_chat_history(request_id, limit=2)
-    system_prompt_text = "Eres el Copiloto de IA de Banorte. Atiendes únicamente al usuario autenticado. No tienes acceso a datos de otros usuarios ni debes revelar información ajena bajo ninguna circunstancia."
+    system_prompt_text = (
+        "Eres el Copiloto de IA de Banorte para el usuario autenticado.\n"
+        "REGLAS STRICTAS DE USO DE HERRAMIENTAS:\n"
+        "1. Ejecuta ÚNICAMENTE la herramienta necesaria para responder la pregunta concreta del usuario. Si el usuario pide 'consultar saldo', ejecuta SOLO `herramienta_ver_saldo`. NO llames a herramientas no solicitadas.\n"
+        "2. Pasa únicamente números limpios como argumentos (ejemplo: 5000 para montos, 10 para plazo en años).\n"
+        "3. Sé conciso, profesional y amable."
+    )
     
     async def stream_generator():
         try:
