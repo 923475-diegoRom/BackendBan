@@ -12,6 +12,7 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from app.core import get_llm
 from app.rag import search_context, seed_sample_data, ingest_pdf
+from app.database import init_db, save_audit_log
 from app.tools import simular_credito
 from app.logger import get_logger
 from app.metrics import LLM_REQUEST_COUNTER, LLM_LATENCY_HISTOGRAM, LLM_TTFT_HISTOGRAM
@@ -46,6 +47,8 @@ class ChatRequest(BaseModel):
 def startup_db():
     # Carga datos iniciales al arrancar la app
     seed_sample_data()
+    # Inicializa BD de logs
+    init_db()
 
 # Endpoint para recolección de métricas por Prometheus/Datadog/Azure Monitor
 @app.get("/metrics")
@@ -85,6 +88,7 @@ async def chat_stream(request: ChatRequest):
         first_token_received = False
         ttft = 0.0
         token_count = 0
+        full_response = ""
         
         try:
             # Enviar las fuentes primero si existen
@@ -93,6 +97,7 @@ async def chat_stream(request: ChatRequest):
             
             async for chunk in llm.astream(system_prompt):
                 if chunk.content:
+                    full_response += chunk.content
                     # Medir Time To First Token (TTFT) en la primera emisión de token
                     if not first_token_received:
                         ttft = time.time() - start_time
@@ -135,6 +140,20 @@ async def chat_stream(request: ChatRequest):
                     "ttft_sec": round(ttft, 4),
                     "tokens_per_second": round(token_count / max(total_duration, 0.001), 2)
                 }}
+            )
+            
+            # Guardar en SQLite Cloud de forma asíncrona
+            asyncio.create_task(
+                asyncio.to_thread(
+                    save_audit_log, 
+                    request_id, 
+                    request.message, 
+                    full_response, 
+                    ttft, 
+                    total_duration, 
+                    token_count, 
+                    model_name
+                )
             )
 
         except Exception as e:

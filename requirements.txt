@@ -11,3 +11,4 @@ python-multipart
 pypdf
 langchain-text-splitters
 groq
+sqlitecloud
