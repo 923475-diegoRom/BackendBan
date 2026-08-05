@@ -9,7 +9,7 @@ load_dotenv()
 # Model Context Protocol / LLM: Gemma 2 9B vía Groq
 def get_llm():
     return ChatGroq(
-        model_name="gemma2-9b-it",
+        model_name="llama-3.3-70b-versatile",
         groq_api_key=os.getenv("GROQ_API_KEY"),
         temperature=0.2,
         streaming=True
