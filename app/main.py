@@ -25,7 +25,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import create_react_agent
 from app.core import get_llm
 from app.rag import seed_sample_data, ingest_pdf
-from app.database import init_db, save_audit_log
+from app.database import init_db, save_audit_log, init_chat_history, save_chat_message
 from app.core_banking import init_core_db
 from app.agent_tools import get_agent_tools
 from app.logger import get_logger
@@ -68,6 +68,7 @@ def startup_db():
     init_db()
     # Inicializa BD de core bancario
     init_core_db()
+    init_chat_history()
 
 # Endpoint para recolección de métricas por Prometheus/Datadog/Azure Monitor
 @app.get("/metrics")
@@ -78,6 +79,8 @@ def metrics():
 async def chat_stream(request: ChatRequest):
     request_id = str(uuid.uuid4())
     model_name = "llama-3.3-70b-versatile"
+    # Persist the user's message for this session
+    save_chat_message(request_id, "user", request.message)
 
     logger.info(
         f"Iniciando solicitud de IA stream", 
@@ -188,16 +191,25 @@ Si la herramienta devuelve 2 transacciones, tú le muestras al usuario exactamen
                 }}
             )
             
+            # Guardar la respuesta del asistente en la tabla de historial de chat
+            asyncio.create_task(
+                asyncio.to_thread(
+                    save_chat_message,
+                    request_id,
+                    "assistant",
+                    full_response
+                )
+            )
             # Guardar en SQLite Cloud de forma asíncrona
             asyncio.create_task(
                 asyncio.to_thread(
-                    save_audit_log, 
-                    request_id, 
-                    request.message, 
-                    full_response, 
-                    ttft, 
-                    total_duration, 
-                    token_count, 
+                    save_audit_log,
+                    request_id,
+                    request.message,
+                    full_response,
+                    ttft,
+                    total_duration,
+                    token_count,
                     model_name
                 )
             )

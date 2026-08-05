@@ -55,3 +55,78 @@ def save_audit_log(request_id: str, user_message: str, bot_response: str, ttft: 
             print(f"Error saving audit log to SQLite Cloud: {e}")
         finally:
             conn.close()
+
+# ---------------------------------------------------------------------------
+# Chat History Persistence
+# ---------------------------------------------------------------------------
+# The audit_logs table already records a request/response pair, but for a richer
+# conversational UI we need a finer‑grained per‑turn storage. We create a new
+# `chat_messages` table that stores each message (user, assistant, or system)
+# together with a `session_id` that groups messages belonging to the same
+# conversation.
+
+def init_chat_history():
+    """Create the `chat_messages` table if it does not exist.
+
+    Columns:
+        id          – primary key
+        session_id  – identifier for the conversation (string)
+        role        – 'user', 'assistant' or 'system'
+        content     – raw text of the message
+        timestamp   – creation time (default now)
+    """
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    role TEXT CHECK(role IN ('user','assistant','system')) NOT NULL,
+                    content TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+        finally:
+            conn.close()
+
+def save_chat_message(session_id: str, role: str, content: str):
+    """Persist a single message in the `chat_messages` table.
+
+    Args:
+        session_id: Identifier that groups messages belonging to the same chat.
+        role:       One of 'user', 'assistant', or 'system'.
+        content:    The textual content of the message.
+    """
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)",
+                (session_id, role, content)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+def load_chat_history(session_id: str, limit: int = 100):
+    """Retrieve ordered messages for a given `session_id`.
+
+    Returns a list of tuples `(role, content)` ordered by insertion time.
+    """
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id ASC LIMIT ?",
+                (session_id, limit)
+            )
+            return cur.fetchall()
+        finally:
+            conn.close()
+        
+# ---------------------------------------------------------------------------
