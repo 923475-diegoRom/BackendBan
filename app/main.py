@@ -18,7 +18,7 @@ logger = get_logger("BanorteGenAI")
 app = FastAPI(
     title="Banorte GenAI Copilot Backend",
     version="1.0.0",
-    description="API Full Stack con RAG, Gemma 2 y Agentes de IA, con Observabilidad"
+    description="API Full Stack con RAG, llama-3.3-70b-versatile y Agentes de IA, con Observabilidad"
 )
 
 global_stats = {
@@ -53,7 +53,7 @@ def metrics():
 @app.post("/api/v1/chat/stream")
 async def chat_stream(request: ChatRequest):
     request_id = str(uuid.uuid4())
-    model_name = "gemma2-9b-it"
+    model_name = "llama-3.3-70b-versatile"
 
     logger.info(
         f"Iniciando solicitud de IA stream", 
@@ -153,7 +153,7 @@ async def calculate_credit(monto: float, plazo: int):
 
 @app.get("/health")
 def health():
-    return {"status": "online", "engine": "Gemma 2 9B via Groq", "vector_db": "Qdrant Cloud"}
+    return {"status": "online", "engine": "llama-3.3-70b-versatile via Groq", "vector_db": "Qdrant Cloud"}
 
 @app.get("/api/v1/status")
 def get_status():
@@ -161,7 +161,7 @@ def get_status():
     throughput = global_stats["total_tokens"] / global_stats["total_duration"] if global_stats["total_duration"] > 0 else 45.0
     return {
         "status": "Online",
-        "engine": "Gemma 2 9B",
+        "engine": "llama-3.3-70b-versatile",
         "average_latency": f"{round(avg_latency * 1000)} ms", 
         "throughput": f"{round(throughput)} tok/s"
     }
