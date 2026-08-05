@@ -121,7 +121,8 @@ Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin
                     if tool_name == "herramienta_buscar_info_institucional":
                         try:
                             # Try to extract the sources if we returned JSON
-                            parsed = json.loads(tool_output)
+                            output_str = tool_output.content if hasattr(tool_output, 'content') else str(tool_output)
+                            parsed = json.loads(output_str)
                             sources = parsed.get("fuentes_usadas", [])
                             info_text = parsed.get("info", "")
                             if sources:
@@ -129,7 +130,8 @@ Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin
                                 # Incluimos los "pedazos de info" en pageContent
                                 formatted_sources = [{"metadata": {"source": src}, "pageContent": info_text} for src in sources]
                                 yield f"data: {json.dumps({'type': 'sources', 'content': formatted_sources})}\n\n"
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Error parsing tool_output for sources: {e}")
                             pass
                             
                     yield f"data: {json.dumps({'type': 'tool_end', 'name': tool_name, 'output': str(tool_output)})}\n\n"
