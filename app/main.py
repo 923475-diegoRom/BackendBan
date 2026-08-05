@@ -62,6 +62,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message: str
     use_rag: bool = True
+    session_id: str | None = None
 
 @app.on_event("startup")
 def startup_db():
@@ -114,7 +115,10 @@ async def _run_agent_stream(llm, tools, system_prompt_text, user_message, reques
         elif event["event"] == "on_tool_start":
             yield f"data: {json.dumps({'type': 'tool_start', 'name': event['name'], 'input': event['data'].get('input', {})})}\n\n"
         elif event["event"] == "on_tool_end":
-            yield f"data: {json.dumps({'type': 'tool_end', 'name': event['name'], 'output': str(event['data'].get('output', ''))})}\n\n"
+            tool_output = event['data'].get('output', '')
+            if hasattr(tool_output, 'content'):
+                tool_output = tool_output.content
+            yield f"data: {json.dumps({'type': 'tool_end', 'name': event['name'], 'output': str(tool_output)})}\n\n"
 
     total_duration = time.time() - start_time
     LLM_LATENCY_HISTOGRAM.labels(model=model_name).observe(total_duration)
@@ -153,14 +157,16 @@ async def chat_stream(request: ChatRequest, req: Request):
     tools = get_agent_tools_for_user(user_id)
 
     user_message = request.message
-    save_chat_message(request_id, "user", user_message)
+    session_key = request.session_id or request_id
+    save_chat_message(session_key, "user", user_message)
 
     system_prompt_text = (
-        "Eres el Copiloto de IA de Banorte para el usuario autenticado.\n"
-        "REGLAS STRICTAS DE USO DE HERRAMIENTAS:\n"
-        "1. Ejecuta ÚNICAMENTE la herramienta necesaria para responder la pregunta concreta del usuario. Si el usuario pide 'consultar saldo', ejecuta SOLO `herramienta_ver_saldo`. NO llames a herramientas no solicitadas.\n"
-        "2. Pasa únicamente números limpios como argumentos (ejemplo: 5000 para montos, 10 para plazo en años).\n"
-        "3. Sé conciso, profesional y amable."
+        "Eres el Copiloto Financiero de IA oficial de Banorte para el usuario autenticado actual.\n"
+        "AUTORIZACIÓN Y REGLAS DE RESPUESTA BANCARIA:\n"
+        "1. Estás plenamente AUTORIZADO a mostrar al usuario el saldo, tarjetas, productos, transacciones y contactos devueltos por tus herramientas (`herramienta_ver_saldo`, `herramienta_ver_contactos`, etc.). NUNCA te niegues a responder ni digas que no puedes dar información financiera real; los datos provienen de la base de datos oficial del usuario.\n"
+        "2. Presenta la información devuelta por la herramienta de forma clara, directa y amable.\n"
+        "3. Ejecuta ÚNICAMENTE la herramienta necesaria para responder la consulta específica del usuario (ejemplo: si piden saldo, ejecuta solo `herramienta_ver_saldo`).\n"
+        "4. Pasa únicamente números limpios como argumentos (ejemplo: 5000 para montos, 10 para plazo en años)."
     )
     
     async def stream_generator():
