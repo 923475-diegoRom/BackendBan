@@ -14,23 +14,22 @@ import json
 import uuid
 import asyncio
 import os
-from groq import Groq
+from groq import Groq, RateLimitError
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import create_react_agent
-from app.core import get_llm
+from app.core import get_llm, get_fallback_llm
 from app.rag import seed_sample_data, ingest_pdf
 from app.supabase_audit import init_db, save_audit_log, init_chat_history, save_chat_message, load_chat_history
-from app.core import get_fallback_llm
 from app.auth import router as auth_router
-from groq import RateLimitError
 from app.core_banking import init_core_db
-from app.agent_tools import get_agent_tools
+from app.agent_tools import get_agent_tools_for_user
+from app.supabase_client import supabase
+from app.supabase_helper import select
 from app.logger import get_logger
 from app.metrics import LLM_REQUEST_COUNTER, LLM_LATENCY_HISTOGRAM, LLM_TTFT_HISTOGRAM
 
@@ -41,16 +40,6 @@ app = FastAPI(
     description="API Full Stack con RAG, Llama 3.3 70B y Agentes de IA, con Observabilidad"
 )
 
-# Include auth routes
-app.include_router(auth_router, prefix="/api/v1")
-
-global_stats = {
-    "total_latency": 0.0,
-    "total_tokens": 0,
-    "total_requests": 0,
-    "total_duration": 0.0
-}
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,6 +47,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include auth routes
+app.include_router(auth_router, prefix="/api/v1")
 
 class ChatRequest(BaseModel):
     message: str
@@ -84,10 +76,6 @@ def startup_db():
 @app.get("/metrics")
 def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-from app.supabase_client import supabase
-from app.supabase_helper import select
-from app.agent_tools import get_agent_tools_for_user
 
 async def _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name):
     agent_executor = create_react_agent(llm, tools=tools, prompt=system_prompt_text)

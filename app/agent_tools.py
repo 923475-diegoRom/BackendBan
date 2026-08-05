@@ -1,4 +1,5 @@
 import re
+import json
 from typing import Union
 from langchain.tools import tool
 from app.core_banking import consultar_saldo, consultar_productos, hacer_transferencia, consultar_contactos, consultar_transacciones
@@ -69,7 +70,6 @@ def get_agent_tools_for_user(user_id: str):
     def herramienta_buscar_info_institucional(pregunta: str) -> str:
         """Útil ÚNICAMENTE para responder dudas sobre reglamentos, políticas, tarjetas de crédito/nómina o información general de Banorte."""
         context, sources = search_context(pregunta)
-        import json
         return json.dumps({
             "info": context,
             "fuentes_usadas": sources
