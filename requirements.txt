@@ -6,3 +6,5 @@ qdrant-client
 python-dotenv
 pydantic
 prometheus-client
+sentence-transformers
+
