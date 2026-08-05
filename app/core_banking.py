@@ -161,12 +161,16 @@ def hacer_transferencia(cliente_id: str, cuenta_destino: str, monto: float) -> s
     if not conn: return "Servicio no disponible temporalmente."
     try:
         cursor = conn.cursor()
+        cuenta_destino_limpia = cuenta_destino.lower().replace("cuenta de", "").strip()
         
         # Intentar resolver cuenta_destino por alias en contactos
-        cursor.execute("SELECT cuenta_destino FROM contactos WHERE cliente_id = ? AND LOWER(alias) = LOWER(?)", (cliente_id, cuenta_destino))
+        cursor.execute(
+            "SELECT cuenta_destino FROM contactos WHERE cliente_id = ? AND (LOWER(alias) = LOWER(?) OR LOWER(alias) = ?)", 
+            (cliente_id, cuenta_destino, cuenta_destino_limpia)
+        )
         contacto = cursor.fetchone()
-        if contacto:
-            cuenta_destino = contacto[0]
+        
+        cuenta_final = contacto[0] if contacto else cuenta_destino
         
         # Validar si tiene saldo en su primera cuenta
         cursor.execute("SELECT cuenta_id, saldo FROM cuentas WHERE cliente_id = ? LIMIT 1", (cliente_id,))
@@ -189,12 +193,12 @@ def hacer_transferencia(cliente_id: str, cuenta_destino: str, monto: float) -> s
         # Guardar en transacciones
         cursor.execute(
             "INSERT INTO transacciones (cliente_id, tipo, monto, cuenta_destino) VALUES (?, ?, ?, ?)",
-            (cliente_id, "Transferencia Enviada", monto, cuenta_destino)
+            (cliente_id, "Transferencia Enviada", monto, cuenta_final)
         )
         
         conn.commit()
         
-        return f"✅ Transferencia exitosa de ${monto:,.2f} MXN a la cuenta {cuenta_destino}. Tu nuevo saldo es ${nuevo_saldo:,.2f} MXN."
+        return f"✅ Transferencia exitosa de ${monto:,.2f} MXN a la cuenta {cuenta_final}. Tu nuevo saldo es ${nuevo_saldo:,.2f} MXN."
     except Exception as e:
         conn.rollback()
         return f"Error procesando la transferencia: {str(e)}"
