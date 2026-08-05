@@ -15,6 +15,18 @@ def get_llm():
         streaming=True
     )
 
+
+def get_fallback_llm():
+    """Return a lighter fallback LLM model.
+    Used when the primary model hits rate limits or other errors.
+    """
+    return ChatGroq(
+        model_name="llama-3.1-8b-versatile",
+        groq_api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0.2,
+        streaming=True
+    )
+
 # Embeddings de pesos abiertos ultraligeros
 def get_embeddings():
     return HuggingFaceEmbeddings(
