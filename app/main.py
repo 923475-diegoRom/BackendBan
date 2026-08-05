@@ -2,14 +2,14 @@ import time
 import json
 import uuid
 import asyncio
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from app.core import get_llm
-from app.rag import search_context, seed_sample_data
+from app.rag import search_context, seed_sample_data, ingest_pdf
 from app.tools import simular_credito
 from app.logger import get_logger
 from app.metrics import LLM_REQUEST_COUNTER, LLM_LATENCY_HISTOGRAM, LLM_TTFT_HISTOGRAM
@@ -165,3 +165,20 @@ def get_status():
         "average_latency": f"{round(avg_latency * 1000)} ms", 
         "throughput": f"{round(throughput)} tok/s"
     }
+
+@app.post("/api/v1/documents/upload")
+async def upload_document(file: UploadFile = File(...)):
+    if not file.filename.endswith('.pdf'):
+        return {"status": "error", "message": "Solo se permiten archivos PDF"}
+        
+    try:
+        contents = await file.read()
+        chunks_indexed = ingest_pdf(contents, file.filename)
+        return {
+            "status": "success",
+            "message": f"Documento procesado correctamente",
+            "chunks_indexed": chunks_indexed
+        }
+    except Exception as e:
+        logger.error(f"Error procesando PDF: {str(e)}")
+        return {"status": "error", "message": str(e)}

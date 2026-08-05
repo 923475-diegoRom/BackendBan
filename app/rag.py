@@ -1,6 +1,10 @@
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from app.core import get_vector_client, get_embeddings
 import uuid
+import io
+from pypdf import PdfReader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 
 COLLECTION_NAME = "banorte_productos"
 
@@ -60,4 +64,48 @@ def search_context(query: str, limit: int = 2):
         contexts.append(res.payload["text"])
         sources.append(res.payload["source"])
         
-    return "\\n".join(contexts), list(set(sources))
+    return "\n".join(contexts), list(set(sources))
+
+def ingest_pdf(file_bytes: bytes, filename: str) -> int:
+    """Extrae texto de un PDF y lo indexa en Qdrant"""
+    initialize_collection()
+    
+    # Leer el PDF desde los bytes
+    reader = PdfReader(io.BytesIO(file_bytes))
+    full_text = ""
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            full_text += text + "\n"
+            
+    if not full_text.strip():
+        return 0
+        
+    # Dividir el texto en fragmentos
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len
+    )
+    chunks = text_splitter.split_text(full_text)
+    
+    client = get_vector_client()
+    embeddings = get_embeddings()
+    points = []
+    
+    # Generar embeddings para cada fragmento
+    for chunk in chunks:
+        vector = embeddings.embed_query(chunk)
+        points.append(
+            PointStruct(
+                id=str(uuid.uuid4()),
+                vector=vector,
+                payload={"text": chunk, "source": filename}
+            )
+        )
+        
+    # Subir a Qdrant
+    if points:
+        client.upsert(collection_name=COLLECTION_NAME, points=points)
+        
+    return len(points)

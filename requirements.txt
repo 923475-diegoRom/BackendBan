@@ -7,4 +7,6 @@ python-dotenv
 pydantic
 prometheus-client
 sentence-transformers
-
+python-multipart
+pypdf
+langchain-text-splitters
