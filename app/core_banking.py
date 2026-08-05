@@ -162,6 +162,12 @@ def hacer_transferencia(cliente_id: str, cuenta_destino: str, monto: float) -> s
     try:
         cursor = conn.cursor()
         
+        # Intentar resolver cuenta_destino por alias en contactos
+        cursor.execute("SELECT cuenta_destino FROM contactos WHERE cliente_id = ? AND LOWER(alias) = LOWER(?)", (cliente_id, cuenta_destino))
+        contacto = cursor.fetchone()
+        if contacto:
+            cuenta_destino = contacto[0]
+        
         # Validar si tiene saldo en su primera cuenta
         cursor.execute("SELECT cuenta_id, saldo FROM cuentas WHERE cliente_id = ? LIMIT 1", (cliente_id,))
         cuenta = cursor.fetchone()

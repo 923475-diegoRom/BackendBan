@@ -71,7 +71,8 @@ async def chat_stream(request: ChatRequest):
     )
 
     llm = get_llm()
-    system_prompt_text = f"""Eres el Copiloto de Inteligencia Artificial de Banorte.
+    system_prompt_text = f"""Eres el Copiloto de Inteligencia Artificial de Banorte. ERES EXCLUSIVO DE BANORTE.
+Si el usuario te pregunta por BBVA, Bancomer, Santander o cualquier otro banco competidor, dile educadamente que tú solo tienes información y acceso a los productos de Banorte. No inventes información de otros bancos ni uses la información de Banorte para responder por otros.
 Responde al usuario de manera profesional, clara y concisa.
 Tienes acceso a herramientas para consultar saldos, hacer transferencias, simular créditos, buscar información institucional, ver contactos y ver transacciones. 
 El cliente actual logueado es C-TEST (Usuario Test). Si necesitas saber algo de él, usa tus herramientas.
@@ -116,6 +117,17 @@ Si te piden consultar saldo, ver transacciones o hacer transferencias, hazlo sin
                 elif event["event"] == "on_tool_end":
                     tool_name = event["name"]
                     tool_output = event["data"].get("output", "")
+                    
+                    if tool_name == "herramienta_buscar_info_institucional":
+                        try:
+                            # Try to extract the sources if we returned JSON
+                            parsed = json.loads(tool_output)
+                            sources = parsed.get("fuentes_usadas", [])
+                            if sources:
+                                yield f"data: {json.dumps({'type': 'sources', 'content': sources})}\n\n"
+                        except Exception:
+                            pass
+                            
                     yield f"data: {json.dumps({'type': 'tool_end', 'name': tool_name, 'output': str(tool_output)})}\n\n"
 
             # Cálculo de la latencia total y registros de cierre

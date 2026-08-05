@@ -47,7 +47,11 @@ def herramienta_buscar_info_institucional(pregunta: str) -> str:
     Hace una búsqueda en la base de conocimientos interna del banco (RAG).
     """
     context, sources = search_context(pregunta)
-    return f"Información encontrada:\n{context}\n(Fuentes consultadas: {', '.join(sources)})"
+    import json
+    return json.dumps({
+        "info": context,
+        "fuentes_usadas": sources
+    }, ensure_ascii=False)
 
 # Lista maestra de herramientas
 get_agent_tools = [
