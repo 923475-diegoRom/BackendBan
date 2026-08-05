@@ -15,6 +15,6 @@ faker
 pypdf
 langchain-text-splitters
 groq
-supabase-py
+supabase
 langchain
 langgraph
