@@ -1,4 +1,3 @@
-[app]
 # Fly.io deployment configuration for BackendBan
 app = "backendban"
 
