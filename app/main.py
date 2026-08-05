@@ -18,7 +18,7 @@ logger = get_logger("BanorteGenAI")
 app = FastAPI(
     title="Banorte GenAI Copilot Backend",
     version="1.0.0",
-    description="API Full Stack con RAG, llama-3.3-70b-versatile y Agentes de IA, con Observabilidad"
+    description="API Full Stack con RAG, Llama 3.3 70B y Agentes de IA, con Observabilidad"
 )
 
 global_stats = {

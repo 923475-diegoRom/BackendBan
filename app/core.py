@@ -6,7 +6,7 @@ from qdrant_client import QdrantClient
 
 load_dotenv()
 
-# Model Context Protocol / LLM: Gemma 2 9B vía Groq
+# Model Context Protocol / LLM:llama-3.3-70b-versatile  9B vía Groq
 def get_llm():
     return ChatGroq(
         model_name="llama-3.3-70b-versatile",
