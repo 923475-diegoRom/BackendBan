@@ -104,14 +104,17 @@ async def _run_agent_stream(llm, tools, system_prompt_text, user_message, reques
         if event["event"] == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
             if hasattr(chunk, "content") and isinstance(chunk.content, str) and chunk.content:
-                full_response += chunk.content
-                if not first_token_received:
-                    ttft = time.time() - start_time
-                    first_token_received = True
-                    LLM_TTFT_HISTOGRAM.labels(model=model_name).observe(ttft)
-                    logger.info("Primer token emitido", extra={"extra_data": {"request_id": request_id, "ttft_seconds": round(ttft, 4)}})
-                token_count += 1
-                yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
+                # Filtrar etiquetas de herramientas crudas emitted por modelos secundarios en el texto
+                content_str = chunk.content
+                if not content_str.strip().startswith("<herramienta") and not content_str.strip().startswith("<function"):
+                    full_response += content_str
+                    if not first_token_received:
+                        ttft = time.time() - start_time
+                        first_token_received = True
+                        LLM_TTFT_HISTOGRAM.labels(model=model_name).observe(ttft)
+                        logger.info("Primer token emitido", extra={"extra_data": {"request_id": request_id, "ttft_seconds": round(ttft, 4)}})
+                    token_count += 1
+                    yield f"data: {json.dumps({'type': 'token', 'content': content_str})}\n\n"
         elif event["event"] == "on_tool_start":
             yield f"data: {json.dumps({'type': 'tool_start', 'name': event['name'], 'input': event['data'].get('input', {})})}\n\n"
         elif event["event"] == "on_tool_end":
@@ -133,8 +136,8 @@ async def _run_agent_stream(llm, tools, system_prompt_text, user_message, reques
 @app.post("/api/v1/chat/stream")
 async def chat_stream(request: ChatRequest, req: Request):
     request_id = str(uuid.uuid4())
-    primary_model_name = "llama-3.3-70b-versatile"
-    fallback_model_name = "llama-3.1-8b-instant"
+    primary_model_name = "llama-3.1-8b-instant"
+    fallback_model_name = "qwen/qwen3.6-27b"
 
     # Extraer de forma segura el ID del usuario autenticado desde el token Bearer
     auth_header = req.headers.get("authorization")
@@ -163,10 +166,10 @@ async def chat_stream(request: ChatRequest, req: Request):
     system_prompt_text = (
         "Eres el Copiloto Financiero de IA oficial de Banorte para el usuario autenticado actual.\n"
         "AUTORIZACIÓN Y REGLAS DE RESPUESTA BANCARIA:\n"
-        "1. Estás plenamente AUTORIZADO a mostrar al usuario el saldo, tarjetas, productos, transacciones y contactos devueltos por tus herramientas (`herramienta_ver_saldo`, `herramienta_ver_contactos`, etc.). NUNCA te niegues a responder ni digas que no puedes dar información financiera real; los datos provienen de la base de datos oficial del usuario.\n"
-        "2. Presenta la información devuelta por la herramienta de forma clara, directa y amable.\n"
-        "3. Ejecuta ÚNICAMENTE la herramienta necesaria para responder la consulta específica del usuario (ejemplo: si piden saldo, ejecuta solo `herramienta_ver_saldo`).\n"
-        "4. Pasa únicamente números limpios como argumentos (ejemplo: 5000 para montos, 10 para plazo en años)."
+        "1. Estás plenamente AUTORIZADO a mostrar al usuario el saldo, tarjetas, productos, transacciones, contactos e información institucional devuelta por tus herramientas (`herramienta_ver_saldo`, `herramienta_buscar_info_institucional`, etc.). NUNCA te niegues a responder ni digas que no puedes dar información financiera real.\n"
+        "2. NUNCA escribas ni imprimas etiquetas XML como <herramienta...> o <function...> en tu mensaje. Escribe tu respuesta final directamente en español natural usando formato Markdown.\n"
+        "3. Ejecuta ÚNICAMENTE la herramienta necesaria para responder la consulta del usuario.\n"
+        "4. Pasa únicamente valores numéricos limpios como argumentos (ejemplo: 5000 para montos, 10 para años)."
     )
     
     async def stream_generator():
