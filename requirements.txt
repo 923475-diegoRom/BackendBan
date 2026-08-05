@@ -13,3 +13,4 @@ langchain-text-splitters
 groq
 sqlitecloud
 langchain
+langgraph
