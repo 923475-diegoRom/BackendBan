@@ -130,7 +130,7 @@ async def _run_agent_stream(llm, tools, system_prompt_text, recent_messages, req
 async def chat_stream(request: ChatRequest, req: Request):
     request_id = str(uuid.uuid4())
     primary_model_name = "llama-3.3-70b-versatile"
-    fallback_model_name = "llama-3.1-8b-versatile"
+    fallback_model_name = "llama-3.1-8b-instant"
 
     # Extraer de forma segura el ID del usuario autenticado desde el token Bearer
     auth_header = req.headers.get("authorization")
