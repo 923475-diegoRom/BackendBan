@@ -1,0 +1,26 @@
+[app]
+# Fly.io deployment configuration for BackendBan
+app = "backendban"
+
+# Choose the region closest to your users
+primary_region = "iad"
+
+[build]
+  # Use the Dockerfile already present at the repo root
+  dockerfile = "Dockerfile"
+
+[env]
+  # Optional: enforce unbuffered Python output for better log streaming
+  PYTHONUNBUFFERED = "1"
+
+[[services]]
+  internal_port = 8000               # FastAPI listens on $PORT (defaults to 8000)
+  protocol = "tcp"
+
+  # Map the internal port to the public HTTP(S) endpoint
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
