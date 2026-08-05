@@ -88,7 +88,7 @@ from app.supabase_client import supabase
 from app.supabase_helper import select
 from app.agent_tools import get_agent_tools_for_user
 
-async def _run_agent_stream(llm, tools, system_prompt_text, recent_messages, request_id, model_name):
+async def _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name):
     agent_executor = create_react_agent(llm, tools=tools, prompt=system_prompt_text)
     start_time = time.time()
     
@@ -98,7 +98,7 @@ async def _run_agent_stream(llm, tools, system_prompt_text, recent_messages, req
     full_response = ""
     
     async for event in agent_executor.astream_events({
-        "messages": [("system", system_prompt_text)] + recent_messages
+        "messages": [("system", system_prompt_text), ("user", user_message)]
     }, version="v2"):
         if event["event"] == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
@@ -152,7 +152,9 @@ async def chat_stream(request: ChatRequest, req: Request):
     # Crear herramientas con alcance exclusivo para este usuario
     tools = get_agent_tools_for_user(user_id)
 
-    save_chat_message(request_id, "user", request.message)
+    user_message = request.message
+    save_chat_message(request_id, "user", user_message)
+
     system_prompt_text = (
         "Eres el Copiloto de IA de Banorte para el usuario autenticado.\n"
         "REGLAS STRICTAS DE USO DE HERRAMIENTAS:\n"
@@ -163,11 +165,11 @@ async def chat_stream(request: ChatRequest, req: Request):
     
     async def stream_generator():
         try:
-            async for event in _run_agent_stream(get_llm(), tools, system_prompt_text, recent_messages, request_id, primary_model_name):
+            async for event in _run_agent_stream(get_llm(), tools, system_prompt_text, user_message, request_id, primary_model_name):
                 yield event
         except RateLimitError:
             logger.warning("Rate limit reached; switching to fallback model", extra={"extra_data": {"request_id": request_id}})
-            async for event in _run_agent_stream(get_fallback_llm(), tools, system_prompt_text, recent_messages, request_id, fallback_model_name):
+            async for event in _run_agent_stream(get_fallback_llm(), tools, system_prompt_text, user_message, request_id, fallback_model_name):
                 yield event
         except Exception as e:
             logger.error(f"Error: {e}")
