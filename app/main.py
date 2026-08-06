@@ -216,7 +216,18 @@ def get_status():
 
 @app.post("/api/v1/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
-    return {"status": "success"}
+    try:
+        content = await file.read()
+        chunks_indexed = ingest_pdf(content, file.filename)
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "chunks_indexed": chunks_indexed,
+            "message": f"Documento {file.filename} indexado correctamente en Qdrant."
+        }
+    except Exception as e:
+        logger.error(f"Error al subir e indexar documento en Qdrant: {e}")
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/v1/audio/transcribe")
 async def transcribe_audio(audio: UploadFile = File(...)):
