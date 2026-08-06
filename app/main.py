@@ -77,7 +77,7 @@ def startup_db():
 def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
-async def _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name):
+async def _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name, chat_history=None):
     agent_executor = create_react_agent(llm, tools=tools, prompt=system_prompt_text)
     start_time = time.time()
     
@@ -86,8 +86,14 @@ async def _run_agent_stream(llm, tools, system_prompt_text, user_message, reques
     token_count = 0
     full_response = ""
     
+    messages_payload = [("system", system_prompt_text)]
+    if chat_history:
+        for role, content in chat_history:
+            messages_payload.append((role, content))
+    messages_payload.append(("user", user_message))
+
     async for event in agent_executor.astream_events({
-        "messages": [("system", system_prompt_text), ("user", user_message)]
+        "messages": messages_payload
     }, version="v2"):
         if event["event"] == "on_chat_model_stream":
             chunk = event["data"]["chunk"]
@@ -160,6 +166,10 @@ async def chat_stream(request: ChatRequest, req: Request):
 
     user_message = request.message
     session_key = request.session_id or request_id
+    
+    # Cargar historial previo de la sesion antes de guardar el mensaje actual
+    history = load_chat_history(session_key, limit=6)
+    
     save_chat_message(session_key, "user", user_message)
 
     system_prompt_text = (
@@ -169,7 +179,7 @@ async def chat_stream(request: ChatRequest, req: Request):
         "2. REGLA DE SEGURIDAD PARA TRANSFERENCIAS (HUMAN-IN-THE-LOOP):\n"
         "   - Cuando el usuario pida realizar una transferencia de dinero, NO ejecutes inmediatamente la herramienta de transferencia.\n"
         "   - En su lugar, responde solicitando confirmación al usuario de forma clara indicando el monto y la cuenta o contacto de destino, y agrega exactamente el marcador de confirmación al final: `[REQUIERE_CONFIRMACION:monto,cuenta_destino]` (reemplazando monto y cuenta_destino por los valores correspondientes).\n"
-        "   - ÚNICAMENTE si el usuario responde explícitamente confirmando la transacción (ejemplo: 'Sí, confirmo', 'Adelante', 'Confirmar'), ejecuta la `herramienta_transferir_dinero`.\n"
+        "   - ÚNICAMENTE si el usuario responde explícitamente confirmando la transacción (ejemplo: 'Sí, confirmo la transferencia', 'Sí, confirmo', 'Adelante', 'Confirmar'), ejecuta la `herramienta_transferir_dinero` con el monto y destino solicitados en el mensaje previo.\n"
         "3. NUNCA escribas ni imprimas etiquetas XML como <herramienta...> o <function...> en tu mensaje. Escribe tu respuesta final directamente en español natural usando formato Markdown.\n"
         "4. Ejecuta ÚNICAMENTE la herramienta necesaria para responder la consulta del usuario.\n"
         "5. Pasa únicamente valores numéricos limpios como argumentos (ejemplo: 5000 para montos, 10 para años)."
@@ -179,7 +189,7 @@ async def chat_stream(request: ChatRequest, req: Request):
         for model_name in candidate_models:
             try:
                 llm = get_llm_by_model(model_name)
-                async for event in _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name):
+                async for event in _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name, chat_history=history):
                     yield event
                 return  # Si la ejecución finalizó correctamente, terminamos la función
             except RateLimitError:
