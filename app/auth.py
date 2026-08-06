@@ -89,6 +89,7 @@ def signup(payload: SignUpRequest):
             "email": payload.email,
             "password": payload.password,
             "options": {
+                "email_redirect_to": "https://front-end-ban.vercel.app/",
                 "data": {
                     "profile_id": user_id,
                     "name": payload.name
