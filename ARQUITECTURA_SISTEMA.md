@@ -76,7 +76,7 @@ Para entender cómo funciona el agente ante una orden del usuario (ejemplo: *"Tr
 
 ### A. Capacidades Bancarias (Core Financial Operations)
 * **Consulta de Saldo en Tiempo Real:** Acceso directo a la cuenta vinculada al usuario autenticado.
-* **Transferencias Bancarias Seguras:** Transacciones inmediatas entre usuarios registrando débitos, créditos e historial en la base de datos Supabase.
+* **Transferencias Bancarias Seguras con Human-in-the-Loop:** Transacciones inmediatas entre usuarios registrando débitos, créditos e historial en la base de datos Supabase. Requieren un ciclo de seguridad previo de confirmación explícita mediante etiquetas estructuradas (`[REQUIERE_CONFIRMACION:monto,destino]`) con mensajes auto-contenidos para evitar la saturación de tokens en la ventana de contexto de la LLM.
 * **Simulación de Créditos/Préstamos:** Cálculo matemático automático de cuotas, tasas de interés y esquemas de pago (Francés/Alemán).
 * **Historial de Movimientos:** Acceso a los últimos estados de cuenta y transacciones auditadas.
 

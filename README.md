@@ -31,7 +31,7 @@ El backend está construido con una arquitectura moderna de agentes asíncronos 
 Es el núcleo de la aplicación FastAPI. Administra CORS, inicializa bases de datos al arrancar y expone los endpoints HTTP/SSE:
 
 * **Endpoints Principales**:
-  * **`POST /api/v1/chat/stream`**: Recibe `{ message, use_rag, session_id }`, verifica la autenticación mediante token JWT de Supabase, crea las herramientas personalizadas del usuario e inicia el streaming en tiempo real (Server-Sent Events) usando la cadena de fallbacks de LLMs.
+  * **`POST /api/v1/chat/stream`**: Recibe `{ message, use_rag, session_id }`, verifica la autenticación mediante token JWT de Supabase, crea las herramientas personalizadas del usuario e inicia el streaming en tiempo real (Server-Sent Events) usando la cadena de fallbacks de LLMs. Carga un historial ultraligero (2 mensajes) para máxima eficiencia de tokens y aplica el patrón Human-in-the-Loop para transferencias.
   * **`POST /api/v1/documents/upload`**: Recibe un archivo PDF, lo procesa mediante `ingest_pdf()` en `rag.py` y guarda los fragmentos vectorizados en Qdrant.
   * **`POST /api/v1/audio/transcribe`**: Recibe un archivo de audio (`UploadFile`), invoca Whisper Large v3 en Groq y retorna el texto transcrito.
   * **`GET /api/v1/status`**: Devuelve la salud de la API, latencia promedio calculada en vivo y rendimiento de tokens (`tok/s`).
@@ -46,7 +46,7 @@ Define las herramientas (Tools) que el Agente ReAct del LLM puede decidir ejecut
 * **`herramienta_ver_productos()`**: Muestra las tarjetas y créditos contratados en la tabla `productos`.
 * **`herramienta_ver_contactos()`**: Retorna la lista de contactos frecuentes formateados en México (`es_MX`).
 * **`herramienta_ver_transacciones()`**: Muestra el historial de movimientos de la cuenta.
-* **`herramienta_transferir_dinero(cuenta_destino, monto)`**: Valida fondos suficientes, descuenta el saldo del usuario e inserta la transacción.
+* **`herramienta_transferir_dinero(cuenta_destino, monto)`**: Valida fondos suficientes, descuenta el saldo del usuario e inserta la transacción. Sujeta al patrón **Human-in-the-Loop** (requiere confirmación explícita previa del usuario mediante el tag `[REQUIERE_CONFIRMACION:monto,cuenta_destino]`).
 * **`herramienta_simular_credito(monto, plazo_anios)`**: Calcula la cuota mensual fija usando la fórmula de amortización.
 * **`herramienta_buscar_info_institucional(pregunta)`**: Ejecuta la búsqueda vectorial en Qdrant y devuelve un JSON estructurado con la información y las fuentes oficiales (`fuentes_usadas`).
 
@@ -72,11 +72,11 @@ Gestiona la autenticación con Supabase Auth e integración de perfiles:
 ---
 
 ### 5. 🗄️ `app/supabase_audit.py`, `app/supabase_client.py` y `app/supabase_helper.py` – Persistencia en Supabase
-Reemplaza la persistencia local/SQLite por una infraestructura en la nube con Supabase (PostgreSQL):
+Reemplaza la persistencia local/SQLite por una infraestructura en la nube con Supabase (PostgreSQL) con alta resiliencia:
 
 * **`supabase_client.py`**: Instancia el cliente de Supabase usando `SUPABASE_URL` y la clave de servicio `SUPABASE_SERVICE_ROLE_KEY`.
-* **`supabase_helper.py`**: Wrapper genérico que abstrae operaciones CRUD (`select`, `insert`, `update`).
-* **`supabase_audit.py`**: Persiste el historial de conversaciones en `chat_messages` y guarda la auditoría de rendimiento en `audit_logs` (registrando `request_id`, `user_message`, `bot_response`, `ttft`, `total_time`, `tokens` y `model_name`).
+* **`supabase_helper.py`**: Wrapper genérico que abstrae operaciones CRUD (`select`, `insert`, `update`) incorporando **reintentos automáticos transparentes** ante errores de socket inactivo (`RemoteProtocolError: Server disconnected`).
+* **`supabase_audit.py`**: Persiste el historial de conversaciones en `chat_messages` y guarda la auditoría de rendimiento en `audit_logs` en bloques protegidos con `try/except` para garantizar que problemas de auditoría o red no interrumpan las operaciones bancarias del usuario.
 
 ---
 
@@ -118,9 +118,10 @@ Configura las conexiones principales:
 1. **Recepción**: El usuario envía su mensaje desde la UI junto con su token JWT.
 2. **Autenticación**: `auth_header` extrae el `profile_id` del usuario autenticado.
 3. **Instanciación de Herramientas**: Se cargan únicamente las herramientas asociadas al `user_id` del usuario.
-4. **Agente ReAct**: `create_react_agent` evalúa el mensaje. Si el usuario pregunta por un saldo o políticas, el agente decide ejecutar la herramienta adecuada (`on_tool_start` -> `on_tool_end`).
-5. **Generación con Fallback Chain**: Intenta generar la respuesta token por token vía SSE. Si el modelo actual alcanza un error 429 (`RateLimitError`), salta automáticamente al siguiente modelo de la cadena.
-6. **Métricas y Auditoría**: Se calcula TTFT, tiempo total y cantidad de tokens; finalmente se guarda el registro de auditoría en la tabla `audit_logs` de Supabase.
+4. **Agente ReAct & Human-in-the-Loop**: `create_react_agent` evalúa el mensaje con el historial ultraligero cargado (limit=2). Si la petición requiere transferencia, solicita confirmación previa emitiendo `[REQUIERE_CONFIRMACION:monto,destino]`.
+5. **Ejecución Segura**: Tras la confirmación del usuario, el agente ejecuta `herramienta_transferir_dinero` y actualiza la cuenta en Supabase.
+6. **Generación con Fallback Chain**: Intenta generar la respuesta token por token vía SSE. Si el modelo actual alcanza un error 429 (`RateLimitError`), salta automáticamente al siguiente modelo de la cadena.
+7. **Métricas y Auditoría Resiliente**: Se calcula TTFT, tiempo total y cantidad de tokens; finalmente se guarda el registro de auditoría en la tabla `audit_logs` de Supabase con reintentos automáticos.
 
 ---
 

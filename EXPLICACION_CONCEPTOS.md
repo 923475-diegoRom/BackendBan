@@ -73,13 +73,13 @@ El modelo no conoce información interna privada del banco (tarifas, tarjetas es
 ## 5. Memoria Conversacional y Persistencia (`session_id` / `thread_id`)
 
 ### 💡 Concepto Teórico
-Los modelos de IA no tienen memoria. Cada petición HTTP a un servidor es aislada. Para que la IA "recuerde" quién eres y qué hablaron hace 2 minutos, debemos recargar el historial completo de mensajes asociándolo a un identificador único de sesión (`session_id`).
+Los modelos de IA no tienen memoria. Cada petición HTTP a un servidor es aislada. Para que la IA "recuerde" quién eres y qué hablaron hace unos instantes, cargamos un **historial ultraligero recortado (limit=2)** asociándolo a un identificador de sesión (`session_id`). Esto evita el consumo excesivo de tokens y respeta las cuotas de frecuencia de Groq.
 
 ### 🔍 ¿Dónde está en nuestro código?
-* En [database.py](file:///d:/dr871/Projects/BackendBan/app/database.py#L68) y [supabase_audit.py](file:///d:/dr871/Projects/BackendBan/app/supabase_audit.py):
-  * Tabla SQLite `chat_messages` guarda cada turno (`user`, `assistant`, `system`).
-  * `load_chat_history(session_id)` recupera los mensajes pasados antes de enviar la nueva petición a LangGraph.
-  * `save_chat_message(...)` guarda los nuevos mensajes generados.
+* En [main.py](file:///d:/dr871/Projects/BackendBan/app/main.py#L170) y [supabase_audit.py](file:///d:/dr871/Projects/BackendBan/app/supabase_audit.py):
+  * `load_chat_history(session_key, limit=2)` recupera únicamente el par indispensable de mensajes pasados antes de enviar la nueva petición a LangGraph.
+  * `save_chat_message(...)` guarda los nuevos mensajes generados en bloques `try/except` resilientes.
+  * Patron **Human-in-the-Loop**: En [main.py](file:///d:/dr871/Projects/BackendBan/app/main.py#L180), el System Prompt instruye a la LLM a exigir confirmación previa emitiendo `[REQUIERE_CONFIRMACION:monto,destino]` antes de llamar a `herramienta_transferir_dinero`.
 
 ---
 
