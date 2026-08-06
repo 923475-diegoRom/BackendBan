@@ -19,9 +19,15 @@ def initialize_collection():
         )
 
 def seed_sample_data():
-    """Carga inicial de información de productos Banorte"""
+    """Carga inicial de información de productos Banorte (solo si la colección está vacía)"""
     initialize_collection()
     client = get_vector_client()
+    
+    # Verificar si ya existen puntos en la colección para evitar duplicados
+    count_res = client.count(collection_name=COLLECTION_NAME)
+    if count_res.count > 0:
+        return
+
     embeddings = get_embeddings()
     
     documents = [
