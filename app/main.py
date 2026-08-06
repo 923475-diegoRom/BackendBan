@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from langgraph.prebuilt import create_react_agent
-from app.core import get_llm, get_fallback_llm
+from app.core import get_llm, get_fallback_llm, get_llm_by_model
 from app.rag import seed_sample_data, ingest_pdf
 from app.supabase_audit import init_db, save_audit_log, init_chat_history, save_chat_message, load_chat_history
 from app.auth import router as auth_router
@@ -128,8 +128,15 @@ async def _run_agent_stream(llm, tools, system_prompt_text, user_message, reques
 @app.post("/api/v1/chat/stream")
 async def chat_stream(request: ChatRequest, req: Request):
     request_id = str(uuid.uuid4())
-    primary_model_name = "qwen/qwen3.6-27b"
-    fallback_model_name = "llama-3.1-8b-instant"
+    # Lista ordenada de modelos para la cadena de Fallback en Groq
+    candidate_models = [
+        "qwen/qwen3.6-27b",
+        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+        "llama-3.1-8b-instant",
+        "allam-2-7b"
+    ]
 
     # Extraer de forma segura el ID del usuario autenticado desde el token Bearer
     auth_header = req.headers.get("authorization")
@@ -165,17 +172,19 @@ async def chat_stream(request: ChatRequest, req: Request):
     )
     
     async def stream_generator():
-        try:
-            async for event in _run_agent_stream(get_llm(), tools, system_prompt_text, user_message, request_id, primary_model_name):
-                yield event
-        except RateLimitError:
-            logger.warning("Rate limit reached; switching to fallback model", extra={"extra_data": {"request_id": request_id}})
-            async for event in _run_agent_stream(get_fallback_llm(), tools, system_prompt_text, user_message, request_id, fallback_model_name):
-                yield event
-        except Exception as e:
-            logger.error(f"Error: {e}")
-            raise e
-            
+        for model_name in candidate_models:
+            try:
+                llm = get_llm_by_model(model_name)
+                async for event in _run_agent_stream(llm, tools, system_prompt_text, user_message, request_id, model_name):
+                    yield event
+                return  # Si la ejecución finalizó correctamente, terminamos la función
+            except RateLimitError:
+                logger.warning(f"Rate limit reached for model '{model_name}'; attempting next fallback in chain.", extra={"extra_data": {"request_id": request_id}})
+            except Exception as e:
+                logger.error(f"Error executing model {model_name}: {e}")
+                # Si falló por límite o error de modelo, intentamos el siguiente en la cadena
+                continue
+                
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 @app.post("/api/v1/agent/simulate")
