@@ -38,9 +38,9 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 def _create_new_user_profile(name: str):
     """Crea un perfil de usuario nuevo en Supabase con su cuenta, tarjeta y contactos iniciales."""
-    user_id = f"usr_{uuid.uuid4().hex[:8]}"
+    user_id = str(uuid.uuid4())
     
-    # 1. Insertar nuevo usuario en la tabla 'users'
+    # 1. Insertar nuevo usuario en la tabla 'users' (id es de tipo UUID)
     new_user = {
         "id": user_id,
         "name": name,
@@ -51,11 +51,11 @@ def _create_new_user_profile(name: str):
     # 2. Generar tarjeta Banorte asociada
     card_number = f"4152 31{random.randint(10, 99)} {random.randint(1000, 9999)} {random.randint(1000, 9999)}"
     new_card = {
-        "id": f"card_{uuid.uuid4().hex[:8]}",
+        "id": str(uuid.uuid4()),
         "user_id": user_id,
+        "provider": "Banorte",
         "card_number": card_number,
-        "exp": "12/28",
-        "type": "Debit Gold Banorte"
+        "expiry": "12/28"
     }
     try:
         supabase.table("cards").insert(new_card).execute()
@@ -64,8 +64,8 @@ def _create_new_user_profile(name: str):
 
     # 3. Insertar contactos de transferencia por defecto
     default_contacts = [
-        {"id": f"cnt_{uuid.uuid4().hex[:6]}", "user_id": user_id, "name": "Servicio de Renta", "account": "0012398412"},
-        {"id": f"cnt_{uuid.uuid4().hex[:6]}", "user_id": user_id, "name": "Mamá", "account": "0098765432"},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Servicio de Renta", "cuenta_destino": "0012398412"},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Mamá", "cuenta_destino": "0098765432"},
     ]
     try:
         supabase.table("contacts").insert(default_contacts).execute()
