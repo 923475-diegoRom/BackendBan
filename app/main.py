@@ -167,8 +167,8 @@ async def chat_stream(request: ChatRequest, req: Request):
     user_message = request.message
     session_key = request.session_id or request_id
     
-    # Cargar historial previo de la sesion antes de guardar el mensaje actual
-    history = load_chat_history(session_key, limit=6)
+    # Cargar únicamente los últimos 2 mensajes esenciales para ahorrar consumo de tokens
+    history = load_chat_history(session_key, limit=2)
     
     save_chat_message(session_key, "user", user_message)
 
