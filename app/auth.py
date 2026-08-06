@@ -1,14 +1,13 @@
+import random
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from app.supabase_client import supabase, create_user, create_card, create_contact
-from faker import Faker
+from app.supabase_client import supabase
+from app.supabase_helper import select
 
 router = APIRouter()
 
 security = HTTPBearer()
-
-fake = Faker()
 
 class SignUpRequest(BaseModel):
     name: str
@@ -36,19 +35,19 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Error al verificar token: {str(e)}")
 
+def _get_existing_user_or_fallback():
+    users = select("users", "*")
+    if users:
+        return random.choice(users)
+    raise HTTPException(status_code=500, detail="No hay usuarios registrados previamente en la base de datos.")
+
 @router.post("/signup")
 def signup(payload: SignUpRequest):
-    # 1. Crear registro bancario inicial ($1,000,000 saldo + tarjeta + contactos)
-    user = create_user(payload.name)
-    user_id = user["id"] if isinstance(user, dict) else user.get("id")
-    create_card(user_id)
-    contacts = []
-    for _ in range(3):
-        contact_name = fake.name()
-        contact_phone = fake.phone_number()
-        contacts.append(create_contact(user_id, contact_name, contact_phone))
+    # Asignar un registro bancario existente aleatorio en lugar de crear uno nuevo dummy
+    existing_user = _get_existing_user_or_fallback()
+    user_id = existing_user["id"]
 
-    # 2. Registrar en Supabase Auth con Email y Password reales
+    # Registrar en Supabase Auth con el email/password enlazado al perfil existente
     try:
         sign_up_resp = supabase.auth.sign_up({
             "email": payload.email,
@@ -56,7 +55,7 @@ def signup(payload: SignUpRequest):
             "options": {
                 "data": {
                     "profile_id": user_id,
-                    "name": payload.name
+                    "name": existing_user.get("name", payload.name)
                 }
             }
         })
@@ -71,7 +70,7 @@ def signup(payload: SignUpRequest):
     return {
         "access_token": token,
         "message": "Registro exitoso en Supabase" if token else "Registro exitoso. Revisa tu correo si Supabase requiere confirmación.",
-        "user": user
+        "user": existing_user
     }
 
 @router.post("/login")
@@ -103,13 +102,8 @@ def get_me(user=Depends(verify_token)):
     profile_id = metadata.get("profile_id") if isinstance(metadata, dict) else None
 
     if not profile_id:
-        email = getattr(user, "email", "Usuario")
-        name = metadata.get("name") or (email.split("@")[0] if email else "Usuario")
-        u_rec = create_user(name)
-        profile_id = u_rec["id"]
-        create_card(profile_id)
-        for _ in range(3):
-            create_contact(profile_id, fake.name(), fake.phone_number())
+        existing_user = _get_existing_user_or_fallback()
+        profile_id = existing_user["id"]
 
     u_res = supabase.table("users").select("*").eq("id", profile_id).execute()
     if not u_res.data or len(u_res.data) == 0:

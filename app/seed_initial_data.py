@@ -3,7 +3,7 @@ import uuid
 from faker import Faker
 from app.supabase_client import supabase, create_user, create_card, create_contact
 
-fake = Faker()
+fake = Faker('es_MX')
 
 def seed_demo_users():
     # Create two demo users with one Banorte card each and three contacts
